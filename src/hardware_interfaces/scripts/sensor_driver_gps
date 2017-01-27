@@ -1,0 +1,136 @@
+#!/usr/bin/env python
+
+"""
+A driver for ultimate GPS sensors
+"""
+# TODO: veryfy trajectory of (x,y) obtained from this driver.
+# TODO: need to think about how to operate across the UTM zones
+
+from __future__ import division
+import rospy
+import time
+import serial
+import pynmea2
+from hardware_interfaces.msg import gps
+import utm
+
+
+class ultimateGPS(object):
+    def __init__(self):
+        self._gpsOut = gps()
+
+        self._DataID = {'GGA': self.gga,
+                        'RMC': self.rmc,
+                        'GSA': self.gsa,
+                        'GSV': self.gsv,
+                        'VTG': self.vtg}
+
+        # get parameters
+        self._controlRate = rospy.get_param('loop_timing/hardware', 10.)
+        lat_ori = rospy.get_param('launch_location/lat_ori', 50.938539)
+        lon_ori = rospy.get_param('launch_location/lon_ori', -1.384939)
+        self.x_UTM_ori, self.y_UTM_ori, _, _ = utm.from_latlon(lat_ori, lon_ori)
+
+        self._r = rospy.Rate(self._controlRate*2)  # Hz (loop twice as fast as the sensor sample rate)
+        self._getAll = False
+        self.config()
+        self.mainloop()
+
+    # ###########################################################
+    # Parsing NMEA sentence
+    # ###########################################################
+    def gga(self, msg):
+        # GPS quality indicator (0=invalid; 1=GPS fix; 2=Diff. GPS fix)
+        self._gpsOut.gps_qual = msg.gps_qual
+        # Number of satellites in use [not those in view]
+        self._gpsOut.num_sats = int(msg.num_sats)
+        # latitude in decimal degree
+        self._gpsOut.latitude = msg.latitude
+        # longitude in decimal degree
+        self._gpsOut.longitude = msg.longitude
+        # Diff. between WGS-84 earth ellipsoid and mean sea level.
+        # (-=geoid is below WGS-84 ellipsoid.)
+        self._gpsOut.geo_sep = float(msg.geo_sep)
+
+        x_UTM_NOW, y_UTM_NOW, _, _ = utm.from_latlon(self._gpsOut.latitude,
+                                                     self._gpsOut.longitude)
+
+        self._gpsOut.x = x_UTM_NOW - self.x_UTM_ori
+        self._gpsOut.y = y_UTM_NOW - self.y_UTM_ori
+
+        self._getAll = True
+
+    def rmc(self, msg):
+        # Speed over ground in m/s
+        self._gpsOut.speed = msg.spd_over_grnd*0.51444444444
+        # Navigation receiver warning A = OK, V = warning
+        self._gpsOut.nav_stat = msg.status
+
+    def gsa(self, msg):
+        pass
+
+    def gsv(self, msg):
+        pass
+
+    def vtg(self, msg):
+        pass
+    # ###########################################################
+
+    # ###########################################################
+    # Utilities
+    # ###########################################################
+    def openSerialPort(self, br):
+        self.serialPort = serial.Serial(port='/dev/ttyS0',
+                                        baudrate=br,
+                                        bytesize=8,
+                                        parity='N',
+                                        stopbits=1,
+                                        timeout=0.2)
+
+    def closeSerialPort(self):
+        self.serialPort.close()
+
+    def sendCommand(self, cmd):
+        self.serialPort.write(cmd+"\r\n")
+        time.sleep(0.5)  # wait for the sensor to receive the command
+
+    def config(self):
+        # presuamably, baud rate was set to 9600 by default
+        self.openSerialPort('9600')
+        # set baud rate to 38400 and re-open the port
+        self.sendCommand("$PMTK251,38400*27")
+        self.serialPort.setBaudrate(38400)
+        # set sample rate to 5 Hz
+        self.sendCommand("$PMTK220,200*2C")
+    # ###########################################################
+
+    def mainloop(self):
+        self.serialPort.flushInput()
+        self.serialPort.flushOutput()
+        while not rospy.is_shutdown():
+            while self.serialPort.inWaiting() > 0:
+                if self.serialPort.read(1) == '$':
+                    data = self.serialPort.readline()
+                    try:
+                        msg = pynmea2.parse(data)
+                        self._DataID[msg.sentence_type](msg)
+                    except:
+                        pass
+            else:
+                if self._getAll:
+                    self._gpsOut.header.stamp = rospy.Time.now()
+                    pubSensorGPS.publish(self._gpsOut)
+                self._getAll = False
+                self._r.sleep()
+
+if __name__ == '__main__':
+    time.sleep(1)  # allow the system to come online
+
+    rospy.init_node("sensor_driver_gps", anonymous=False)
+
+    pubSensorGPS = rospy.Publisher('sensor_gps', gps, queue_size=10)
+
+    try:
+        ultimateGPS()
+    except rospy.ROSInterruptException:
+        pass

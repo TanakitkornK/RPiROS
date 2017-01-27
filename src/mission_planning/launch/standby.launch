@@ -1,0 +1,17 @@
+<launch>
+    <!--
+    Test script to load and manipulate data from a yaml file
+    -->
+
+    <!--
+    Parameters
+    -->
+
+    <rosparam file="$(find mission_planning)/launch/parameters/default.yaml" command="load"/>
+
+    <!--
+    Nodes
+    -->
+    <node name = "yamlTest" pkg='hardware_interfaces' type="sensor_driver_gps" output="screen"/>
+
+ </launch>

@@ -1,0 +1,34 @@
+# Typical parameter values
+
+# ###########################################################
+# Info. for the operating area
+# ###########################################################
+launch_location/lat_ori: 50.938539
+launch_location/lon_ori: -1.384939
+# ###########################################################
+
+
+# ###########################################################
+# loop timing control
+# ###########################################################
+loop_timing/hardware: 10.
+loop_timing/controllers: 5.
+loop_timing/state_updaters: 20.
+# ###########################################################
+
+
+# ###########################################################
+# xsens
+# ###########################################################
+# Valid options for MTi1 Series
+# --> General: 50; high_mag_dep: 51; dynamic: 52; north_reference: 53; vru_general: 54
+xsens/filter_profile: 50 # available option
+
+# Available options are 'ENU' and 'NED'. 
+xsens/coordinate_system: 'NED'
+
+# Available options are 'f' (float) or 'd' (double)...
+# and if 'd' is selected, higher buadrate may be necessary.
+xsens/data_format: 'f'
+# ###########################################################
+

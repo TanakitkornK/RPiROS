@@ -1,0 +1,96 @@
+#!/usr/bin/env python
+
+"""
+A driver for xsens sensors (tested on MTi-3).
+It is developed based on the driver written by Francis Colas:
+http://wiki.ros.org/xsens_driver.
+
+user can set:
+- sample rate
+- scenario id
+- buadrate
+- reference location for magnetic field map (lat, lon)
+- RestoreFactoryDefaults
+- coordinate convention [NED, ENU]
+
+support the following data types from the MTData2 packet:
+- orientation (Euler only) [deg]
+- acceleration (free fall only) [m/s^2]
+- rate of turn [rad/s]?
+"""
+# TODO: verify a unit of rate of turn
+# FIXME: At present, only the ENU setting works. ...
+# A coordinate convertion is done manually after getting sensor reading.
+
+from __future__ import division
+import rospy
+import time
+import struct
+from sensor_msgs.msg import Imu
+from xsens_driver.mtdevice import MTDevice
+
+
+# request data packets
+class XSensDriver(object):
+    def __init__(self):
+        self._device = '/dev/usbxsens'
+        self._ReqPacket = {'Acc_lin', 'Vel_ang', 'Ori'}
+
+        self.mt = MTDevice(device=self._device, br=115200, timeout=0.2)
+
+        self._scenario_id = chr(rospy.get_param('xsens/filter_profile', 54))
+        # FIXME: At present, only the ENU setting works
+        self.mt._coorSys = rospy.get_param('xsens/coordinate_system', 'NED')
+        # if 'd' is selected, higher buadrate may be necessary
+        self.mt._ffmt = rospy.get_param('xsens/data_format', 'f')
+        # some numbers are not supported by the sensor, e.g., 40 Hz
+        self._controlRate = rospy.get_param('loop_timing/state_updaters', 20.)
+        lat_ori = rospy.get_param('launch_location/lat_ori', 50.938539)
+        lon_ori = rospy.get_param('launch_location/lon_ori', -1.384939)
+
+        # Hz (loop four times as fast as the sensor sample rate)
+        self._r = rospy.Rate(self._controlRate*4.)
+        self._LatLonAlt = struct.pack('!3d', lat_ori, lon_ori, 0)
+
+        self.config(factoryReset=False)
+        self.mainloop()
+
+    def config(self, factoryReset=False):
+        # Put sensor in configuration mode:
+        self.mt.GoToConfig()
+
+        # Set:
+        if factoryReset:
+            rospy.loginfo("Reset to factory defaults")
+            self.mt.RestoreFactoryDefaults()
+        self.mt.SetLatLonAlt(self._LatLonAlt)
+        self.mt.SetCurrentScenario(self._scenario_id)
+        self.mt.SetOutputConfiguration(self._ReqPacket, self._controlRate)
+
+        # Req:
+        rospy.loginfo("Current scenario: %s (id: %d)" % self.mt.ReqCurrentScenario())
+        rospy.loginfo("Current location: Lat=%.4f, Lon=%.4f, Alt=%.4f" % self.mt.ReqLatLonAlt())
+
+        # Put sensor in measurement mode:
+        self.mt.GoToMeasurement()
+
+    def mainloop(self):
+        while not rospy.is_shutdown():
+            self.mt.read_measurement()
+            if self.mt._getAll:
+                self.mt._imu.header.stamp = rospy.Time.now()
+                pubSensorIMU.publish(self.mt._imu)
+            self.mt._getAll = False
+            self._r.sleep()
+
+if __name__ == '__main__':
+    time.sleep(1)  # allow the system to come online
+
+    rospy.init_node('xsens_driver')
+
+    pubSensorIMU = rospy.Publisher('sensor_imu', Imu, queue_size=10)
+
+    try:
+        XSensDriver()
+    except rospy.ROSInterruptException:
+        pass

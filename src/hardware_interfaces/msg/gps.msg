@@ -1,0 +1,10 @@
+Header  header
+int8    gps_qual
+int8    num_sats
+float64 latitude
+float64 longitude
+float64 geo_sep
+float64 speed
+float64 x
+float64 y
+string  nav_stat
