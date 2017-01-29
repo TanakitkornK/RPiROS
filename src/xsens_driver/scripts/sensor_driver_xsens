@@ -8,7 +8,6 @@ http://wiki.ros.org/xsens_driver.
 user can set:
 - sample rate
 - scenario id
-- buadrate
 - reference location for magnetic field map (lat, lon)
 - RestoreFactoryDefaults
 - coordinate convention [NED, ENU]
@@ -53,6 +52,9 @@ class XSensDriver(object):
         self._LatLonAlt = struct.pack('!3d', lat_ori, lon_ori, 0)
 
         self.config(factoryReset=False)
+
+        self.pubSensorIMU = rospy.Publisher('sensor_imu', Imu, queue_size=10)
+
         self.mainloop()
 
     def config(self, factoryReset=False):
@@ -79,7 +81,7 @@ class XSensDriver(object):
             self.mt.read_measurement()
             if self.mt._getAll:
                 self.mt._imu.header.stamp = rospy.Time.now()
-                pubSensorIMU.publish(self.mt._imu)
+                self.pubSensorIMU.publish(self.mt._imu)
             self.mt._getAll = False
             self._r.sleep()
 
@@ -87,8 +89,6 @@ if __name__ == '__main__':
     time.sleep(1)  # allow the system to come online
 
     rospy.init_node('xsens_driver')
-
-    pubSensorIMU = rospy.Publisher('sensor_imu', Imu, queue_size=10)
 
     try:
         XSensDriver()
