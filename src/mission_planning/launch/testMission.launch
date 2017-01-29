@@ -1,9 +1,0 @@
-<launch>
-    
-    <!-- Mission File! -->
-    <node name="mission_script" pkg="test_pkg" type="echoSineWave.py"  output="screen" required="true" />
-
-    <!-- Data logger -->
-    <node pkg="rosbag" type="record" name="rosbag_record_all" args="record -a -o boldrewood"/>
-
-</launch>
