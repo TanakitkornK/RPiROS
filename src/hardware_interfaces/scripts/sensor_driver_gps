@@ -17,6 +17,7 @@ import utm
 
 class ultimateGPS(object):
     def __init__(self):
+
         self._gpsOut = gps()
 
         self._DataID = {'GGA': self.gga,
@@ -33,6 +34,9 @@ class ultimateGPS(object):
 
         self._r = rospy.Rate(self._controlRate*2)  # Hz (loop twice as fast as the sensor sample rate)
         self._getAll = False
+
+        self.pubSensorGPS = rospy.Publisher('sensor_gps', gps, queue_size=10)
+
         self.config()
         self.mainloop()
 
@@ -119,7 +123,7 @@ class ultimateGPS(object):
             else:
                 if self._getAll:
                     self._gpsOut.header.stamp = rospy.Time.now()
-                    pubSensorGPS.publish(self._gpsOut)
+                    self.pubSensorGPS.publish(self._gpsOut)
                 self._getAll = False
                 self._r.sleep()
 
@@ -127,8 +131,6 @@ if __name__ == '__main__':
     time.sleep(1)  # allow the system to come online
 
     rospy.init_node("sensor_driver_gps", anonymous=False)
-
-    pubSensorGPS = rospy.Publisher('sensor_gps', gps, queue_size=10)
 
     try:
         ultimateGPS()
