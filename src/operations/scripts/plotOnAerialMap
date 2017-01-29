@@ -1,0 +1,101 @@
+#!/usr/bin/env python
+
+from __future__ import division
+import rospy
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
+from sensor_msgs.msg import NavSatFix
+
+from std_msgs.msg import String
+from shapely.geometry import Polygon
+from hardware_interfaces.msg import gps
+import math
+import time
+
+class Debugging_2D_plot():
+    """
+        Node that publish visualisation objects (for RViz)
+    """
+    def __init__(self):
+        self.publisher = rospy.Publisher('trial', MarkerArray, queue_size=10)
+        self.publisherMK = rospy.Publisher('mk', Marker, queue_size=10)
+        self.publisherLocationNow = rospy.Publisher('locationNow', NavSatFix, queue_size=10)
+        rospy.Subscriber('sensor_gps',gps, self.update_position)
+
+        self.markerArray = MarkerArray()
+        self.rate = rospy.Rate(rospy.get_param("loop_timing/controllers"))
+        lat_ori = rospy.get_param('launch_location/lat_ori', 50.938539)
+        lon_ori = rospy.get_param('launch_location/lon_ori', -1.384939)
+        
+        self.colour_red = 256
+        self.colour_green = 256
+        self.colour_blue = 0
+
+        self.count = 0
+        self._id_counter = 0
+        self.MARKERS_MAX = 20
+
+        self.position = [0,0]
+        self.locationNow = NavSatFix()
+
+        self.marker_publish()
+
+    def marker_publish(self):
+        timeZero = time.time()
+
+        while not rospy.is_shutdown():
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.type = marker.SPHERE
+            marker.action = marker.ADD
+            marker.scale.x = 20
+            marker.scale.y = 20
+            marker.scale.z = 20
+
+            marker.color.a = 1.0
+            marker.color.r = self.colour_red / 256.0
+            marker.color.g = self.colour_green / 256.0
+            marker.color.b = self.colour_blue / 256.0
+
+            marker.pose.orientation.w = 1.0
+            marker.pose.position.x = self.position[0] + 5000*math.sin(time.time()-timeZero)
+            marker.pose.position.y = self.position[1] + 5000*math.cos(time.time()-timeZero)
+            marker.pose.position.z = 0
+
+            # We add the new marker to the MarkerArray, removing the oldest
+            # marker from it when necessary
+            if(self.count > self.MARKERS_MAX):
+                self.markerArray.markers.pop(0)
+
+            self.markerArray.markers.append(marker)
+
+            # Renumber the marker IDs
+            id = 0
+            for m in self.markerArray.markers:
+                m.id = id
+                id += 1
+
+            marker.header.stamp = rospy.Time.now()
+            self.locationNow.header.stamp = rospy.Time.now()
+            self.publisherMK.publish(marker)            
+            self.publisher.publish(self.markerArray)
+            self.publisherLocationNow.publish(self.locationNow)
+
+            self.count += 1
+
+            self.rate.sleep()
+
+    def update_position(self, gpsInfo):
+        self.position[0] = gpsInfo.x
+        self.position[1] = gpsInfo.y
+        self.locationNow.latitude = gpsInfo.latitude
+        self.locationNow.longitude = gpsInfo.longitude
+        return
+
+if __name__ == '__main__':
+    rospy.init_node("debugging_2D_plot", anonymous=True)
+    print(">>>>>>>>>>plotter has come online")
+    try:
+        Debugging_2D_plot()
+    except rospy.ROSInterruptException:
+        pass
