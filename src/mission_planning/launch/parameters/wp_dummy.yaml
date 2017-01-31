@@ -1,0 +1,35 @@
+# mission related locations
+
+# ###########################################################
+# Launch location
+# ###########################################################
+launch_location/lat_ori: 50.938539
+launch_location/lon_ori: -1.384939
+# ###########################################################
+
+# ###########################################################
+# Waypoints (expressed as Lat Lon)
+# ###########################################################
+wp/list: ["1", "2", "3", "4", "5", "6", "7"]
+wp/table: {"1": [50.940969, -1.376452], # swaythling train stration
+           "2": [50.934210, -1.382118], # mayfield road
+           "3": [50.938349, -1.392478], # uni-kebab
+           "4": [50.937430, -1.390804], # hampton car part
+           "5": [50.942538, -1.388193], # real event dj
+           "6": [50.935536, -1.393863], # b13
+           "7": [50.934626, -1.376386] # woodmill activity centre
+}
+# ###########################################################
+
+# ###########################################################
+# Parameter for plotting in RVIZ
+# ###########################################################
+loop_timing/controllers: 5
+plotOnMap/path_rgb: [0.8, 1, 1] # rgb
+plotOnMap/path_size: 5
+plotOnMap/wp_rgb: [1, 0, 0] # rgb
+plotOnMap/wp_size: 15
+plotOnMap/trace_rgb: [0, 1, 0] # rgb
+plotOnMap/trace_size: 2
+plotOnMap/MARKERS_MAX: 20 # maximum markers for trace
+# ###########################################################
