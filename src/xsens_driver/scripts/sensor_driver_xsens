@@ -88,7 +88,7 @@ class XSensDriver(object):
 if __name__ == '__main__':
     time.sleep(1)  # allow the system to come online
 
-    rospy.init_node('xsens_driver')
+    rospy.init_node('xsens_driver', anonymous=True)
 
     try:
         XSensDriver()
