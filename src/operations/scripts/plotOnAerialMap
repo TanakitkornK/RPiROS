@@ -5,97 +5,211 @@ import rospy
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 from sensor_msgs.msg import NavSatFix
-
-from std_msgs.msg import String
-from shapely.geometry import Polygon
+from geometry_msgs.msg import Point
 from hardware_interfaces.msg import gps
-import math
 import time
+import utm
 
-class Debugging_2D_plot():
+
+class plotOnAerialMap():
     """
         Node that publish visualisation objects (for RViz)
     """
     def __init__(self):
-        self.publisher = rospy.Publisher('trial', MarkerArray, queue_size=10)
-        self.publisherMK = rospy.Publisher('mk', Marker, queue_size=10)
-        self.publisherLocationNow = rospy.Publisher('locationNow', NavSatFix, queue_size=10)
-        rospy.Subscriber('sensor_gps',gps, self.update_position)
+        # these topics are for RVIZ
+        self.pubLocationNow = rospy.Publisher('plotOnMap_locationNow', NavSatFix, queue_size=10)
+        self.pubWP = rospy.Publisher('plotOnMap_waypoints', MarkerArray, queue_size=10)
+        self.pubPath = rospy.Publisher('plotOnMap_path', MarkerArray, queue_size=10)
+        self.pubTrace = rospy.Publisher('plotOnMap_trace', MarkerArray, queue_size=10)
 
-        self.markerArray = MarkerArray()
-        self.rate = rospy.Rate(rospy.get_param("loop_timing/controllers"))
+        rospy.Subscriber('sensor_gps', gps, self.cb_update_position)
+
         lat_ori = rospy.get_param('launch_location/lat_ori', 50.938539)
         lon_ori = rospy.get_param('launch_location/lon_ori', -1.384939)
-        
-        self.colour_red = 256
-        self.colour_green = 256
-        self.colour_blue = 0
-
+        self.wp_list = rospy.get_param('wp/list', [])
+        self.wp_table = rospy.get_param('wp/table', {})
+        self._controlRate = rospy.get_param('loop_timing/controllers', 5)
+        # Parameters for lines
+        self.path_rgb = rospy.get_param('plotOnMap/path_rgb', [0.8, 1, 1])
+        self.path_size = rospy.get_param('plotOnMap/path_size', 5)
+        # Parameters for waypoints
+        self.wp_rgb = rospy.get_param('plotOnMap/wp_rgb', [1, 0, 0])
+        self.wp_size = rospy.get_param('plotOnMap/wp_size', 15)
+        # Parameters for trace
+        self.trace_rgb = rospy.get_param('plotOnMap/trace_rgb', [0, 1, 0])
+        self.trace_size = rospy.get_param('plotOnMap/trace_size', 2)
+        self.MARKERS_MAX = rospy.get_param('plotOnMap/MARKERS_MAX', 20)
         self.count = 0
-        self._id_counter = 0
-        self.MARKERS_MAX = 20
 
-        self.position = [0,0]
+        self.rate = rospy.Rate(self._controlRate)
+        self.x_UTM_ori, self.y_UTM_ori, _, _ = utm.from_latlon(lat_ori, lon_ori)
+
+        self.positionNow = [0, 0]
+
         self.locationNow = NavSatFix()
 
-        self.marker_publish()
+        # There are more options available...
+        # see: http://wiki.ros.org/rviz/DisplayTypes/Marker
+        self.markerType = {"CUBE": Marker.CUBE,
+                           "SPHERE": Marker.SPHERE,
+                           "CYLINDER": Marker.CYLINDER,
+                           "LINE_STRIP": Marker.LINE_STRIP}
 
-    def marker_publish(self):
-        timeZero = time.time()
+        # initiate the launch location as the centre for the AerialMap
+        self.locationNow.header.stamp = rospy.Time.now()
+        self.locationNow.latitude = lat_ori
+        self.locationNow.longitude = lon_ori
+
+        self.markerArray_wp = MarkerArray()
+        self.markerArray_path = MarkerArray()
+
+        # if wp_list and wp_table are not empty
+        if self.wp_list and self.wp_table:
+            self.gen_MarkerArray_for_wp()
+            self.gen_MarkerArray_for_path()
+
+        self.mainloop()
+
+    def gen_marker(self, _coor_xy, _rgb, _size, _typeName):
+        _marker = Marker()
+        _marker.header.stamp = rospy.Time.now()
+        _marker.header.frame_id = "map"
+        _marker.type = self.markerType[_typeName]
+        _marker.action = _marker.ADD
+        _marker.scale.x = _size
+        _marker.scale.y = _size
+        _marker.scale.z = _size
+
+        _marker.color.a = 1.0
+        _marker.color.r = _rgb[0]
+        _marker.color.g = _rgb[1]
+        _marker.color.b = _rgb[2]
+
+        _marker.pose.orientation.w = 1.0
+        _marker.pose.position.x = _coor_xy[0]
+        _marker.pose.position.y = _coor_xy[1]
+        _marker.pose.position.z = 0
+
+        return _marker
+
+    def gen_line(self, _points):
+        _marker_line = Marker()
+        _marker_line.header.stamp = rospy.Time.now()
+        _marker_line.header.frame_id = "map"
+        _marker_line.type = self.markerType["LINE_STRIP"]
+        _marker_line.action = _marker_line.ADD
+        _marker_line.scale.x = 10
+
+        _marker_line.color.a = 1.0
+        _marker_line.color.r = self.path_rgb[0]
+        _marker_line.color.g = self.path_rgb[1]
+        _marker_line.color.b = self.path_rgb[2]
+
+        _marker_line.points = _points
+
+        return _marker_line
+
+    def computeDistanceFromOrigin(self, coor_LatLon):
+        coor_xy = [0, 0]
+        x_UTM_NOW, y_UTM_NOW, _, _ = utm.from_latlon(coor_LatLon[0],
+                                                     coor_LatLon[1])
+        coor_xy[0] = x_UTM_NOW - self.x_UTM_ori
+        coor_xy[1] = y_UTM_NOW - self.y_UTM_ori
+
+        return coor_xy
+
+    def gen_MarkerArray_for_path(self):
+        points = []
+        for x in self.wp_list:
+            coor_LatLon = self.wp_table[x]
+
+            p = Point()
+            p.x, p.y = self.computeDistanceFromOrigin(coor_LatLon)
+
+            points.append(p)
+
+        # Iterate every two adjacent points...
+        # and create a line connecting them.
+        for idx in range(len(points)-1):
+            marker_line = self.gen_line(points[idx:idx+2])
+            self.markerArray_path.markers.append(marker_line)
+        self.runMarkerArrayID(_markers=self.markerArray_path.markers)
+
+        return
+
+    def gen_MarkerArray_for_wp(self):
+
+        _list = list(set(self.wp_list))  # remove duplicate waypoints
+
+        for idx in range(len(_list)):
+            coor_LatLon = self.wp_table[_list[idx]]
+
+            coor_xy = self.computeDistanceFromOrigin(coor_LatLon)
+
+            marker_wp = self.gen_marker(_coor_xy=coor_xy,
+                                        _rgb=self.wp_rgb,
+                                        _size=self.wp_size,
+                                        _typeName="SPHERE")
+            self.markerArray_wp.markers.append(marker_wp)
+
+        self.runMarkerArrayID(_markers=self.markerArray_wp.markers)
+
+        return
+
+    def runMarkerArrayID(self, _markers):
+        id = 0
+        for m in _markers:
+            m.id = id
+            id += 1
+
+    def mainloop(self):
+        self.markerArray_trace = MarkerArray()
+        tStart = time.time()
 
         while not rospy.is_shutdown():
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.type = marker.SPHERE
-            marker.action = marker.ADD
-            marker.scale.x = 20
-            marker.scale.y = 20
-            marker.scale.z = 20
+            # update MarkerArray foro the trace
+            coor_xy = [0, 0]
+            coor_xy[0] = self.positionNow[0]
+            coor_xy[1] = self.positionNow[1]
 
-            marker.color.a = 1.0
-            marker.color.r = self.colour_red / 256.0
-            marker.color.g = self.colour_green / 256.0
-            marker.color.b = self.colour_blue / 256.0
+            marker_trace = self.gen_marker(_coor_xy=coor_xy,
+                                           _rgb=self.trace_rgb,
+                                           _size=self.trace_size,
+                                           _typeName="SPHERE")
 
-            marker.pose.orientation.w = 1.0
-            marker.pose.position.x = self.position[0] + 5000*math.sin(time.time()-timeZero)
-            marker.pose.position.y = self.position[1] + 5000*math.cos(time.time()-timeZero)
-            marker.pose.position.z = 0
-
-            # We add the new marker to the MarkerArray, removing the oldest
-            # marker from it when necessary
             if(self.count > self.MARKERS_MAX):
-                self.markerArray.markers.pop(0)
+                self.markerArray_trace.markers.pop(0)
 
-            self.markerArray.markers.append(marker)
+            self.markerArray_trace.markers.append(marker_trace)
 
-            # Renumber the marker IDs
-            id = 0
-            for m in self.markerArray.markers:
-                m.id = id
-                id += 1
+            self.runMarkerArrayID(_markers=self.markerArray_trace.markers)
 
-            marker.header.stamp = rospy.Time.now()
-            self.locationNow.header.stamp = rospy.Time.now()
-            self.publisherMK.publish(marker)            
-            self.publisher.publish(self.markerArray)
-            self.publisherLocationNow.publish(self.locationNow)
+            self.pubLocationNow.publish(self.locationNow)
+            self.pubWP.publish(self.markerArray_wp)
+            self.pubPath.publish(self.markerArray_path)
+            self.pubTrace.publish(self.markerArray_trace)
 
             self.count += 1
 
             self.rate.sleep()
 
-    def update_position(self, gpsInfo):
-        self.position[0] = gpsInfo.x
-        self.position[1] = gpsInfo.y
+    def cb_update_position(self, gpsInfo):
+        self.positionNow[0] = gpsInfo.x
+        self.positionNow[1] = gpsInfo.y
+
+        # update the centre for the AerialMap
+        self.locationNow.header.stamp = rospy.Time.now()
         self.locationNow.latitude = gpsInfo.latitude
         self.locationNow.longitude = gpsInfo.longitude
+
         return
 
 if __name__ == '__main__':
-    rospy.init_node("debugging_2D_plot", anonymous=True)
-    print(">>>>>>>>>>plotter has come online")
+    time.sleep(1)  # allow the system to come online
+
+    rospy.init_node("plotOnAerialMap", anonymous=True)
+
     try:
-        Debugging_2D_plot()
+        plotOnAerialMap()
     except rospy.ROSInterruptException:
         pass
