@@ -9,6 +9,10 @@ from geometry_msgs.msg import Point
 from hardware_interfaces.msg import gps
 import time
 import utm
+# TODO:
+"""
+- pub the marker gererators for path and waypoints into the mainloop
+"""
 
 
 class plotOnAerialMap():
@@ -52,8 +56,7 @@ class plotOnAerialMap():
         # see: http://wiki.ros.org/rviz/DisplayTypes/Marker
         self.markerType = {"CUBE": Marker.CUBE,
                            "SPHERE": Marker.SPHERE,
-                           "CYLINDER": Marker.CYLINDER,
-                           "LINE_STRIP": Marker.LINE_STRIP}
+                           "CYLINDER": Marker.CYLINDER}
 
         # initiate the launch location as the centre for the AerialMap
         self.locationNow.header.stamp = rospy.Time.now()
@@ -96,7 +99,7 @@ class plotOnAerialMap():
         _marker_line = Marker()
         _marker_line.header.stamp = rospy.Time.now()
         _marker_line.header.frame_id = "map"
-        _marker_line.type = self.markerType["LINE_STRIP"]
+        _marker_line.type = Marker.LINE_STRIP
         _marker_line.action = _marker_line.ADD
         _marker_line.scale.x = 10
 
