@@ -1,0 +1,58 @@
+#!/usr/bin/env python
+
+"""
+A driver for ultimate GPS sensors
+"""
+# TODO: veryfy trajectory of (x,y) obtained from this driver.
+# TODO: need to think about how to operate across the UTM zones
+
+from __future__ import division
+from sensor_msgs.msg import PointCloud
+from sensor_msgs.msg import PointCloud2
+from geometry_msgs.msg import Point
+import rospy
+import time
+import math
+
+class testConversion(object):
+    def __init__(self):
+
+        self.pubPC = rospy.Publisher('points_in', PointCloud, queue_size=10)
+
+        self._r = rospy.Rate(1)
+        self.mainloop()
+
+    def mainloop(self):
+        x = 0
+        A = 5
+        p = PointCloud()
+        
+        tStart = time.time()
+        
+        while not rospy.is_shutdown():
+            x = A*math.sin((time.time()-tStart)/10)
+            y = A*math.cos((time.time()-tStart)/10)
+        
+            p1 = Point()
+            p2 = Point()
+            p3 = Point()
+            p4 = Point()
+            
+            p1.x, p1.y, p1.z = x, y, 0
+            p2.x, p2.y, p2.z = x, 0, y
+            p3.x, p3.y, p3.z = 0, x, y
+            p4.x, p4.y, p4.z = x, y, 1
+            p.points = [p1,p2,p3,p4]
+            p.header.frame_id = 'map'
+            self.pubPC.publish(p)
+            self._r.sleep()
+
+if __name__ == '__main__':
+    time.sleep(1)  # allow the system to come online
+
+    rospy.init_node("testConversion", anonymous=False)
+
+    try:
+        testConversion()
+    except rospy.ROSInterruptException:
+        pass
