@@ -1,3 +1,6 @@
+<!-- 
+-->
+
 <launch>
     <!--
     General launch file to display GPS coordinates on a 2D map.
@@ -9,15 +12,19 @@
     <!--
     Parameters
     -->
+	<param name="resolution" value="0.02" />
+	<param name="frame_id" type="string" value="map" />
+	<param name="sensor_model/max_range" value="4.0" />
+	<param name="track_changes" value="true"/>
+	<param name="listen_changes" value="false"/>
+	<param name="topic_changes" value="/octomap_tracking_server/changeset" />
+    <param name="min_change_pub" value="0" />
 
     <!--
     Nodes
     -->
-    <include file="$(find octomap_server)/launch/octomap_tracking_server.launch"/>
-    <include file="$(find point_cloud_converter)/launch/point_cloud_converter.launch"/>
-    
+	<node pkg="octomap_server" type="octomap_tracking_server_node" name="octomap_talker" output="screen"/>
     <node pkg="my_sb" type="testConversion" name="testConversion" output="screen"/>
-
-    <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="0.0 0.0 0.0 0.0 0.0 0.0 map my_frame 100" />
+    <!-- <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="10.0 5.0 0.0 0.0 0.0 0.0 map my_frame 100" /> -->
 
  </launch>

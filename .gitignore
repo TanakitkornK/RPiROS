@@ -1,5 +1,8 @@
 devel/
 build/
+octomap_mapping/
+octomap_rviz_plugins/
+geometry2/
 bin/
 lib/
 msg_gen/

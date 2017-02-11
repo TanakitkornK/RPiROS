@@ -1,50 +1,90 @@
 #!/usr/bin/env python
 
 """
-A driver for ultimate GPS sensors
+A script for testing octomap_server
 """
-# TODO: veryfy trajectory of (x,y) obtained from this driver.
-# TODO: need to think about how to operate across the UTM zones
 
 from __future__ import division
-from sensor_msgs.msg import PointCloud
 from sensor_msgs.msg import PointCloud2
-from geometry_msgs.msg import Point
+import sensor_msgs.point_cloud2 as pc2
+from std_msgs.msg import Header
+from geometry_msgs.msg import PoseWithCovarianceStamped
 import rospy
 import time
 import math
 
+import tf
+import tf2_ros
+import geometry_msgs.msg
+
+
 class testConversion(object):
     def __init__(self):
 
-        self.pubPC = rospy.Publisher('points_in', PointCloud, queue_size=10)
+        self.pubPoint2 = rospy.Publisher('cloud_in', PointCloud2, queue_size=10)
+        self.pubPose = rospy.Publisher('initialpose', PoseWithCovarianceStamped, queue_size=10)
 
-        self._r = rospy.Rate(1)
+        self._r = rospy.Rate(10.)
         self.mainloop()
 
     def mainloop(self):
         x = 0
+        dx = 0
         A = 5
-        p = PointCloud()
+        
+        ## TODO: fixme
+        br = tf2_ros.TransformBroadcaster()
+        t = geometry_msgs.msg.TransformStamped()
+        
         
         tStart = time.time()
-        
+        h = Header()
+        pose = PoseWithCovarianceStamped()
         while not rospy.is_shutdown():
-            x = A*math.sin((time.time()-tStart)/10)
-            y = A*math.cos((time.time()-tStart)/10)
-        
-            p1 = Point()
-            p2 = Point()
-            p3 = Point()
-            p4 = Point()
+            h.stamp = rospy.Time.now()
+            h.frame_id = 'my_frame'
             
-            p1.x, p1.y, p1.z = x, y, 0
-            p2.x, p2.y, p2.z = x, 0, y
-            p3.x, p3.y, p3.z = 0, x, y
-            p4.x, p4.y, p4.z = x, y, 1
-            p.points = [p1,p2,p3,p4]
-            p.header.frame_id = 'map'
-            self.pubPC.publish(p)
+            x = A*math.sin((time.time()-tStart))
+            dx += 10
+            dx = dx%100
+            y = A*math.cos((time.time()-tStart))
+            
+            IN = []
+            p1 = [x, y, 1]
+            p2 = [x, 0, y]
+            p3 = [0, x, y]
+            p4 = [x, y, 1]
+            p5 = [x*0.6, A/2, 1]
+#            IN.append(p1)
+            IN.append(p2)
+            IN.append(p3)
+            IN.append(p4)
+            IN.append(p5)
+            
+            
+            t.header.stamp = rospy.Time.now()
+            t.header.frame_id = "my_frame"
+            t.child_frame_id = "map"
+            t.transform.translation.x = dx
+            t.transform.translation.y = 7
+            t.transform.translation.z = 0.0
+            q = tf.transformations.quaternion_from_euler(0, 0, 0)
+            t.transform.rotation.x = q[0]
+            t.transform.rotation.y = q[1]
+            t.transform.rotation.z = q[2]
+            t.transform.rotation.w = q[3]
+            br.sendTransform(t)
+            
+
+            point2OUT = pc2.create_cloud_xyz32(h, IN)
+            
+#            for p in pc2.read_points(point2OUT, field_names = ("x", "y", "z"), skip_nans=True):
+#                 print " x : %f  y: %f  z: %f" %(p[0],p[1],p[2])
+
+#            print(">>>>>>>>>>>>>>")
+#            print h
+#            print(point2OUT.fields)
+            self.pubPoint2.publish(point2OUT)
             self._r.sleep()
 
 if __name__ == '__main__':
