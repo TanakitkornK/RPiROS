@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+"""
+A script for testing how to get keyboard inputs
+TODO:
+- re-design the input configuration
+- modify the gains and flags accordingly
+- get the setpoint published to the actuator setpoint topics
+"""
+
+from __future__ import division
+import rospy
+import time
+import pygame
+import numpy as np
+
+
+class remoteInterface(object):
+    def __init__(self):
+        self._r = rospy.Rate(10.)
+
+        rospy.on_shutdown(self.onShutdownEvents)
+
+        pygame.init()
+
+        self.mainloop()
+
+    def onShutdownEvents(self):
+        print "shutdown time!"
+        pygame.display.quit()
+
+    def mainloop(self):
+        screen = pygame.display.set_mode((640, 480))
+        pygame.display.set_caption('Pygame Keyboard Test')
+        pygame.mouse.set_visible(1)
+
+        while not rospy.is_shutdown():
+            pygame.event.pump()
+
+            keys = pygame.key.get_pressed()
+
+            gains = np.array([20, 1000, 200, 400, 500, 800])
+            flags = np.array([0, 0, 0, 0, 0, 0])
+            if keys[pygame.K_d]:
+                flags[0] = 1
+            if keys[pygame.K_a]:
+                flags[1] = 1
+            if keys[pygame.K_s]:
+                flags[2] = 1
+            if keys[pygame.K_w]:
+                flags[3] = 1
+            if keys[pygame.K_q]:
+                flags[4] = 1
+            if keys[pygame.K_e]:
+                flags[5] = 1
+
+            # element-wise product
+            sp = np.multiply(gains, flags)
+            print sp
+
+            self._r.sleep()
+
+if __name__ == '__main__':
+    time.sleep(1)  # allow the system to come online
+
+    rospy.init_node("remoteControl", anonymous=False)
+
+    try:
+        remoteInterface()
+    except rospy.ROSInterruptException:
+        pass
